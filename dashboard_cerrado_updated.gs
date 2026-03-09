@@ -717,7 +717,7 @@ function buildCharts_(sheet, stats) {
   const monthlyRange = sheet.getRange(startRow + 1, startCol + 3, Math.max(stats.monthly.length + 1, 2), 2);
   const categoryRange = sheet.getRange(startRow + 1, startCol + 6, Math.max(stats.category.length + 1, 2), 2);
   const groupRange = sheet.getRange(startRow + 1, startCol + 9, Math.max(stats.groupCategory.length + 1, 2), 2);
-  const towerRange = sheet.getRange(startRow + 1, startCol + 12, 6, 3);
+  const towerRange = sheet.getRange(startRow + 1, startCol + 12, stats.towerDistribution.length, + 3);
   const recordRange = sheet.getRange(startRow + 1, startCol + 16, Math.max(stats.recordStatus.length + 1, 2), 2);
 
   const maxHourly = Math.max(...stats.hourlyTrend.map(r => r[1]), 0);
