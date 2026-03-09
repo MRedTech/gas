@@ -31,7 +31,7 @@ const CATEGORY_GROUPS = {
   'OTHER': 'OTHERS'
 };
 
-const GROUP_ORDER = [
+const TOWER_GROUP_ORDER = [
   'FOOD DELIVERY',
   'PARCEL / COURIER',
   'E-HAILING / DROP OFF / PICK UP',
@@ -73,12 +73,11 @@ function refreshDashboard() {
 
   const dateFilter = getDashboardDateFilter_(dashboardSheet, allRows);
   const filteredRows = filterRowsByDate_(allRows, dateFilter.startKey, dateFilter.endKey);
-  const stats = buildStatistics_(filteredRows, allRows, dateFilter);
+  const stats = buildStatistics_(filteredRows, allRows);
 
   writeDashboardValues_(dashboardSheet, stats, dateFilter);
   writeHelperTables_(dashboardSheet, stats);
-  writeGroupCategoryVisible_(dashboardSheet, stats.groupCategory);
-  writeTowerSummaryVisible_(dashboardSheet, stats.towerDistribution);
+  writeTowerGroupCategoryVisible_(dashboardSheet, stats.towerDistribution);
   buildCharts_(dashboardSheet, stats);
 }
 
@@ -94,10 +93,10 @@ function initializeDashboardLayout_(sheet, sourceSheet) {
   sheet.setFrozenRows(4);
 
   if (sheet.getMaxRows() < 140) {
-  sheet.insertRowsAfter(sheet.getMaxRows(), 140 - sheet.getMaxRows());
+    sheet.insertRowsAfter(sheet.getMaxRows(), 140 - sheet.getMaxRows());
   }
   if (sheet.getMaxColumns() < 45) {
-  sheet.insertColumnsAfter(sheet.getMaxColumns(), 45 - sheet.getMaxColumns());
+    sheet.insertColumnsAfter(sheet.getMaxColumns(), 45 - sheet.getMaxColumns());
   }
 
   sheet.getRange('A1:L95')
@@ -217,11 +216,11 @@ function createCardFrames_(sheet) {
 
 function createSectionFrames_(sheet) {
   const sections = [
-    { title: 'REGISTRATION BY GROUP CATEGORY', range: 'I5:L15', titleCell: 'I5' },
+    { title: 'REGISTRATION BY GROUP CATEGORY & TOWER', range: 'I5:L15', titleCell: 'I5' },
     { title: 'HOURLY REGISTRATION TREND', range: 'A17:F33', titleCell: 'A17' },
     { title: 'MONTHLY REGISTRATION TREND', range: 'G17:L33', titleCell: 'G17' },
-    { title: 'CATEGORY BREAKDOWN', range: 'A35:F53', titleCell: 'A35' },
-    { title: 'GROUP CATEGORY BREAKDOWN', range: 'G35:L53', titleCell: 'G35' },
+    { title: 'CATEGORY', range: 'A35:F53', titleCell: 'A35' },
+    { title: 'GROUP CATEGORY', range: 'G35:L53', titleCell: 'G35' },
     { title: 'TOWER DISTRIBUTION', range: 'A55:F72', titleCell: 'A55' },
     { title: 'RECORD STATUS', range: 'G55:L72', titleCell: 'G55' }
   ];
@@ -242,20 +241,15 @@ function getSourceRows_(sheet) {
   const lastRow = sheet.getLastRow();
   if (lastRow < 2) return [];
 
-  // Ambil paparan TIMESTAMP kolum A seperti yang user nampak dalam sheet
   const tsDisplay = sheet.getRange(2, 1, lastRow - 1, 1).getDisplayValues();
-
-  // Ambil data lain kolum B:I
   const otherValues = sheet.getRange(2, 2, lastRow - 1, 8).getValues();
-
   const rows = [];
 
   for (let i = 0; i < lastRow - 1; i++) {
-    const timestamp = normalizeDateValue_(tsDisplay[i][0]); // PAKSA baca paparan kolum A
+    const timestamp = normalizeDateValue_(tsDisplay[i][0]);
     if (!(timestamp instanceof Date) || isNaN(timestamp.getTime())) continue;
 
     const row = otherValues[i];
-
     rows.push({
       rowIndex: i + 2,
       timestamp,
@@ -273,20 +267,6 @@ function getSourceRows_(sheet) {
   return rows;
 }
 
-function normalizeSourceRow_(row) {
-  return {
-    timestamp: normalizeDateValue_(row[0]),
-    name: safeUpper_(row[1]),
-    idNo: safeString_(row[2]),
-    regNum: safeUpper_(row[3]),
-    contact: safeString_(row[4]),
-    category: normalizeCategory_(row[5]),
-    tower: normalizeTower_(row[6]),
-    reason: safeString_(row[7]),
-    photoLink: safeString_(row[8])
-  };
-}
-
 function normalizeDateValue_(value) {
   if (Object.prototype.toString.call(value) === '[object Date]' && !isNaN(value.getTime())) {
     return new Date(
@@ -301,8 +281,6 @@ function normalizeDateValue_(value) {
 
   if (typeof value === 'string' && value.trim()) {
     const text = value.trim();
-
-    // Format Secure Entry: d/m/yyyy hh:mm:ss atau dd/MM/yyyy hh:mm:ss
     const match = text.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})(?:\s+(\d{1,2}):(\d{2})(?::(\d{2}))?)?$/);
     if (match) {
       const day = parseInt(match[1], 10);
@@ -313,7 +291,6 @@ function normalizeDateValue_(value) {
       const second = parseInt(match[6] || '0', 10);
 
       const parsed = new Date(year, month, day, hour, minute, second);
-
       if (
         parsed.getFullYear() === year &&
         parsed.getMonth() === month &&
@@ -328,29 +305,6 @@ function normalizeDateValue_(value) {
   }
 
   return null;
-}
-
-function parseDisplayDateStrict_(text) {
-  if (!text) return null;
-
-  const match = String(text).trim().match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
-  if (!match) return null;
-
-  const day = parseInt(match[1], 10);
-  const month = parseInt(match[2], 10) - 1;
-  const year = parseInt(match[3], 10);
-
-  const d = new Date(year, month, day);
-  if (
-    isNaN(d.getTime()) ||
-    d.getFullYear() !== year ||
-    d.getMonth() !== month ||
-    d.getDate() !== day
-  ) {
-    return null;
-  }
-
-  return d;
 }
 
 function normalizeTower_(value) {
@@ -396,11 +350,15 @@ function normalizeCategory_(value) {
   return text;
 }
 
+function parseDashboardFilterDate_(sheet, a1Notation) {
+  const text = safeString_(sheet.getRange(a1Notation).getDisplayValue());
+  return normalizeDateValue_(text);
+}
+
 function getDashboardDateFilter_(sheet, allRows) {
   const earliest = toDateOnly_(allRows.reduce((min, row) => row.timestamp < min ? row.timestamp : min, allRows[0].timestamp));
   const latest = toDateOnly_(allRows.reduce((max, row) => row.timestamp > max ? row.timestamp : max, allRows[0].timestamp));
 
-  // PAKSA baca ikut paparan filter dd/MM/yyyy, bukan nilai mentah locale
   let start = parseDashboardFilterDate_(sheet, DASHBOARD_CONFIG.filterStartCell) || earliest;
   let end = parseDashboardFilterDate_(sheet, DASHBOARD_CONFIG.filterEndCell) || latest;
 
@@ -428,21 +386,18 @@ function getDashboardDateFilter_(sheet, allRows) {
 
 function filterRowsByDate_(rows, startKey, endKey) {
   return rows.filter(row => {
-    // Paksa compare berdasarkan TIMESTAMP kolum A sahaja
     const rowKey = dateKey_(row.timestamp);
     return rowKey >= startKey && rowKey <= endKey;
   });
 }
 
-function buildStatistics_(filteredRows, allRows, dateFilter) {
+function buildStatistics_(filteredRows, allRows) {
   const hourlyTrend = aggregatePeakHour_(filteredRows);
   const monthly = aggregateMonthlyLast4Months_(allRows);
   const category = aggregateCountByLabel_(filteredRows, row => row.category || 'UNKNOWN');
   const groupCategory = aggregateCountByLabel_(filteredRows, row => CATEGORY_GROUPS[row.category] || 'OTHERS');
   const towerDistribution = buildTowerGroupBreakdown_(filteredRows);
-  const towerSummaryRows = buildTowerSummaryRows_(towerDistribution);
   const recordStatus = buildRecordStatus_(filteredRows);
-  const groupSummaryRows = buildFixedGroupSummary_(groupCategory);
 
   const peakHourTop = hourlyTrend
     .slice()
@@ -466,16 +421,13 @@ function buildStatistics_(filteredRows, allRows, dateFilter) {
     category,
     groupCategory,
     towerDistribution,
-    towerSummaryRows,
-    recordStatus,
-    groupSummaryRows
+    recordStatus
   };
 }
 
 function aggregateMonthlyLast4Months_(rows) {
   const now = new Date();
   const currentMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-
   const monthNames = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
 
   const buckets = [];
@@ -485,7 +437,6 @@ function aggregateMonthlyLast4Months_(rows) {
     const d = new Date(currentMonth.getFullYear(), currentMonth.getMonth() - i, 1);
     const key = d.getFullYear() * 100 + (d.getMonth() + 1);
     const label = monthNames[d.getMonth()] + ' ' + d.getFullYear();
-
     const bucket = [label, 0];
     buckets.push(bucket);
     bucketMap.set(key, bucket);
@@ -513,198 +464,30 @@ function aggregateCountByLabel_(rows, labelFn) {
 
 function aggregatePeakHour_(rows) {
   const map = new Map();
-
   rows.forEach(row => {
     const label = Utilities.formatDate(row.timestamp, DASHBOARD_CONFIG.timezone, 'HH:00');
     map.set(label, (map.get(label) || 0) + 1);
   });
-
   return Array.from(map.entries()).sort((a, b) => a[0].localeCompare(b[0]));
 }
 
-function buildTowerDistribution_(rows) {
-  let towerA = 0;
-  let towerB = 0;
+function buildTowerGroupBreakdown_(rows) {
+  const result = Object.fromEntries(TOWER_GROUP_ORDER.map(group => [group, { 'Tower A': 0, 'Tower B': 0 }]));
 
   rows.forEach(row => {
-    if (row.tower === 'Tower A' || row.tower === 'Tower A & B') towerA += 1;
-    if (row.tower === 'Tower B' || row.tower === 'Tower A & B') towerB += 1;
+    const group = CATEGORY_GROUPS[row.category] || 'OTHERS';
+    if (row.tower === 'Tower A' || row.tower === 'Tower A & B') {
+      result[group]['Tower A'] += 1;
+    }
+    if (row.tower === 'Tower B' || row.tower === 'Tower A & B') {
+      result[group]['Tower B'] += 1;
+    }
   });
 
   return [
-    ['Tower A', towerA],
-    ['Tower B', towerB]
+    ['GROUP CATEGORY', 'Tower A', 'Tower B'],
+    ...TOWER_GROUP_ORDER.map(group => [group, result[group]['Tower A'], result[group]['Tower B']])
   ];
-}
-
-function writeTowerSummaryVisible_(sheet, towerDistribution) {
-  const startRow = 5;
-  const startCol = 13; // Column M
-  const blockWidth = 4;
-  const maxRows = 18;
-
-  // Clear area lama + pecahkan merge lama
-  sheet.getRange(startRow, startCol, maxRows, blockWidth).clearContent().clearFormat().breakApart();
-
-  // Tajuk
-  sheet.getRange(startRow, startCol, 1, blockWidth)
-    .merge()
-    .setValue('TOWER SUMMARY')
-    .setFontWeight('bold')
-    .setFontSize(11)
-    .setFontColor('#1b5e20')
-    .setBackground('#f1f8e9')
-    .setHorizontalAlignment('left')
-    .setVerticalAlignment('middle')
-    .setBorder(true, true, true, true, true, true, '#dcedc8', SpreadsheetApp.BorderStyle.SOLID);
-
-  let rowPointer = startRow + 2;
-  const rows = towerDistribution.slice(1); // buang header
-
-  rows.forEach((r, index) => {
-    const category = r[0];
-    const towerA = r[1];
-    const towerB = r[2];
-
-    // Category title
-    sheet.getRange(rowPointer, startCol, 1, blockWidth)
-      .merge()
-      .setValue(category)
-      .setFontWeight('bold')
-      .setFontSize(10)
-      .setFontColor('#2e7d32')
-      .setBackground('#ffffff')
-      .setHorizontalAlignment('left')
-      .setVerticalAlignment('middle');
-
-    // Nilai
-    sheet.getRange(rowPointer + 1, startCol, 1, 2)
-      .merge()
-      .setValue('Tower A : ' + towerA)
-      .setFontWeight('bold')
-      .setFontSize(10)
-      .setHorizontalAlignment('left')
-      .setVerticalAlignment('middle');
-
-    sheet.getRange(rowPointer + 1, startCol + 2, 1, 2)
-      .merge()
-      .setValue('Tower B : ' + towerB)
-      .setFontWeight('bold')
-      .setFontSize(10)
-      .setHorizontalAlignment('left')
-      .setVerticalAlignment('middle');
-
-    // Border block
-    sheet.getRange(rowPointer, startCol, 2, blockWidth)
-      .setBorder(true, true, true, true, false, false, '#dcedc8', SpreadsheetApp.BorderStyle.SOLID);
-
-    if (index < rows.length - 1) {
-      sheet.getRange(rowPointer + 2, startCol, 1, blockWidth).setBackground('#ffffff');
-    }
-
-    rowPointer += 3;
-  });
-
-  // Outer border
-  sheet.getRange(startRow, startCol, Math.min(rowPointer - startRow, maxRows), blockWidth)
-    .setBorder(true, true, true, true, false, false, '#dcedc8', SpreadsheetApp.BorderStyle.SOLID);
-
-  // Lebar kolum
-  sheet.setColumnWidth(startCol, 145);     // M
-  sheet.setColumnWidth(startCol + 1, 95);  // N
-  sheet.setColumnWidth(startCol + 2, 95);  // O
-  sheet.setColumnWidth(startCol + 3, 95);  // P
-}
-
-function writeGroupCategoryVisible_(sheet, groupCategory) {
-  const startRow = 5;
-  const startCol = 9; // Column I
-  const totalRows = 9;
-  const totalCols = 4;
-
-  // Clear isi lama sahaja
-  sheet.getRange(startRow, startCol, totalRows, totalCols)
-    .clearContent()
-    .clearFormat()
-    .breakApart();
-
-  // Tajuk section kekal jelas
-  sheet.getRange(startRow, startCol, 1, totalCols)
-    .merge()
-    .setValue('REGISTRATION BY GROUP CATEGORY')
-    .setFontWeight('bold')
-    .setFontSize(11)
-    .setFontColor('#1b5e20')
-    .setBackground('#f1f8e9')
-    .setHorizontalAlignment('left')
-    .setVerticalAlignment('middle')
-    .setBorder(true, true, true, true, true, true, '#dcedc8', SpreadsheetApp.BorderStyle.SOLID);
-
-  // Header table
-  sheet.getRange(startRow + 1, startCol, 1, 2)
-    .merge()
-    .setValue('GROUP CATEGORY')
-    .setFontWeight('bold')
-    .setFontSize(10)
-    .setHorizontalAlignment('left')
-    .setBackground('#ffffff');
-
-  sheet.getRange(startRow + 1, startCol + 2, 1, 2)
-    .merge()
-    .setValue('TOTAL')
-    .setFontWeight('bold')
-    .setFontSize(10)
-    .setHorizontalAlignment('center')
-    .setBackground('#ffffff');
-
-  const order = [
-    'FOOD DELIVERY',
-    'PARCEL / COURIER',
-    'E-HAILING / DROP OFF / PICK UP',
-    'OWNER / TENANT',
-    'OTHERS'
-  ];
-
-  const labelMap = {
-    'FOOD DELIVERY': 'FOOD DELIVERY',
-    'PARCEL / COURIER': 'PARCEL / COURIER',
-    'E-HAILING / DROP OFF / PICK UP': 'E-HAILING / DROP OFF / PICK UP',
-    'OWNER / TENANT': 'OWNER / TENANT',
-    'OTHERS': 'OTHERS'
-  };
-
-  const map = Object.fromEntries(groupCategory);
-
-  let r = startRow + 2;
-  order.forEach(name => {
-    sheet.getRange(r, startCol, 1, 2)
-      .merge()
-      .setValue(labelMap[name])
-      .setHorizontalAlignment('left')
-      .setVerticalAlignment('middle')
-      .setFontSize(10);
-
-    sheet.getRange(r, startCol + 2, 1, 2)
-      .merge()
-      .setValue(map[name] || 0)
-      .setHorizontalAlignment('center')
-      .setVerticalAlignment('middle')
-      .setFontWeight('bold')
-      .setFontSize(11)
-      .setFontColor('#1b5e20');
-
-    r++;
-  });
-
-  // Border keseluruhan box
-  sheet.getRange(startRow, startCol, totalRows, totalCols)
-    .setBorder(true, true, true, true, true, true, '#dcedc8', SpreadsheetApp.BorderStyle.SOLID);
-
-  // Lebar kolum supaya nampak kemas
-  sheet.setColumnWidth(startCol, 170);     // I
-  sheet.setColumnWidth(startCol + 1, 125); // J
-  sheet.setColumnWidth(startCol + 2, 70);  // K
-  sheet.setColumnWidth(startCol + 3, 70);  // L
 }
 
 function buildRecordStatus_(rows) {
@@ -720,15 +503,6 @@ function buildRecordStatus_(rows) {
     ['REKOD BARU', baru],
     ['REKOD SEDIA ADA', sediaAda]
   ];
-}
-
-function buildFixedGroupSummary_(groupRows) {
-  const map = new Map(groupRows);
-  return GROUP_ORDER.map(group => [group, map.get(group) || 0]);
-}
-
-function addAnnotationRows_(rows) {
-  return rows.map(row => [row[0], row[1], String(row[1])]);
 }
 
 function writeDashboardValues_(sheet, stats, dateFilter) {
@@ -752,69 +526,190 @@ function writeDashboardValues_(sheet, stats, dateFilter) {
   Object.keys(notes).forEach(rangeA1 => sheet.getRange(rangeA1).setValue(notes[rangeA1]));
 }
 
-function writeGroupSummaryTable_(sheet, rows) {
-  sheet.getRange('I6:L15').breakApart();
-  sheet.getRange('I6:L15').clearContent().clearFormat();
+function writeTowerGroupCategoryVisible_(sheet, towerDistribution) {
+  const startRow = 5;
+  const startCol = 9; // Column I
+  const totalCols = 4;
+  const clearRows = 12;
 
-  sheet.getRange('I6:K6')
+  // Clear area lama
+  sheet.getRange(startRow, startCol, clearRows, totalCols)
+    .clearContent()
+    .clearFormat()
+    .breakApart();
+
+  // Tajuk utama
+  sheet.getRange(startRow, startCol, 1, totalCols)
+    .merge()
+    .setValue('REGISTRATION BY GROUP CATEGORY & TOWER')
+    .setFontWeight('bold')
+    .setFontSize(11)
+    .setFontColor('#1b5e20')
+    .setBackground('#f1f8e9')
+    .setHorizontalAlignment('left')
+    .setVerticalAlignment('middle');
+
+  // Header table
+  sheet.getRange(startRow + 1, startCol, 1, 2)
     .merge()
     .setValue('GROUP CATEGORY')
     .setFontWeight('bold')
-    .setBackground('#f1f8e9')
-    .setHorizontalAlignment('center');
+    .setFontSize(10)
+    .setHorizontalAlignment('left')
+    .setVerticalAlignment('middle');
 
-  sheet.getRange('L6')
-    .setValue('TOTAL')
+  sheet.getRange(startRow + 1, startCol + 2)
+    .setValue('A')
+    .setFontWeight('bold')
+    .setFontSize(10)
+    .setHorizontalAlignment('center')
+    .setVerticalAlignment('middle');
+
+  sheet.getRange(startRow + 1, startCol + 3)
+    .setValue('B')
+    .setFontWeight('bold')
+    .setFontSize(10)
+    .setHorizontalAlignment('center')
+    .setVerticalAlignment('middle');
+
+  let r = startRow + 2;
+
+  // towerDistribution format:
+  // ['CATEGORY', 'Tower A', 'Tower B']
+  // ['FOOD DELIVERY', 102, 92]
+  // ...
+
+  const rows = towerDistribution.slice(1);
+
+  rows.forEach(item => {
+    const category = item[0];
+    const towerA = item[1] || 0;
+    const towerB = item[2] || 0;
+
+    sheet.getRange(r, startCol, 1, 2)
+      .merge()
+      .setValue(category)
+      .setHorizontalAlignment('left')
+      .setVerticalAlignment('middle')
+      .setFontSize(10);
+
+    sheet.getRange(r, startCol + 2)
+      .setValue(towerA)
+      .setFontWeight('bold')
+      .setHorizontalAlignment('center')
+      .setVerticalAlignment('middle')
+      .setFontSize(10);
+
+    sheet.getRange(r, startCol + 3)
+      .setValue(towerB)
+      .setFontWeight('bold')
+      .setHorizontalAlignment('center')
+      .setVerticalAlignment('middle')
+      .setFontSize(10);
+
+    r++;
+  });
+
+  const totalA = rows.reduce((sum, item) => sum + (item[1] || 0), 0);
+  const totalB = rows.reduce((sum, item) => sum + (item[2] || 0), 0);
+  const grandTotal = totalA + totalB;
+
+  // TOTAL TOWER
+  sheet.getRange(r, startCol, 1, 2)
+    .merge()
+    .setValue('TOTAL TOWER')
+    .setFontWeight('bold')
+    .setBackground('#f7fbf7')
+    .setHorizontalAlignment('left')
+    .setVerticalAlignment('middle');
+
+  sheet.getRange(r, startCol + 2)
+    .setValue(totalA)
+    .setFontWeight('bold')
+    .setHorizontalAlignment('center')
+    .setVerticalAlignment('middle');
+
+  sheet.getRange(r, startCol + 3)
+    .setValue(totalB)
+    .setFontWeight('bold')
+    .setHorizontalAlignment('center')
+    .setVerticalAlignment('middle');
+
+  r++;
+
+  // GRAND TOTAL
+  sheet.getRange(r, startCol, 1, 3)
+    .merge()
+    .setValue('GRAND TOTAL')
     .setFontWeight('bold')
     .setBackground('#f1f8e9')
-    .setHorizontalAlignment('center');
+    .setHorizontalAlignment('left')
+    .setVerticalAlignment('middle');
 
-  let currentRow = 7;
-  rows.forEach(item => {
-    sheet.getRange(`I${currentRow}:K${currentRow}`)
-      .merge()
-      .setValue(item[0])
-      .setHorizontalAlignment('left');
+  sheet.getRange(r, startCol + 3)
+    .setValue(grandTotal)
+    .setFontWeight('bold')
+    .setFontColor('#1b5e20')
+    .setHorizontalAlignment('center')
+    .setVerticalAlignment('middle');
 
-    sheet.getRange(`L${currentRow}`)
-      .setValue(item[1])
-      .setHorizontalAlignment('center');
+  r++;
 
-    currentRow++;
-  });
+  // NOTE bawah GRAND TOTAL
+  sheet.getRange(r, startCol, 1, totalCols)
+    .merge()
+    .setValue('Note: Grand Total under Tower Summary may be higher than Total Registration because records tagged as "Tower A & B" are counted under both towers for distribution analysis.')
+    .setFontSize(8)
+    .setFontStyle('italic')
+    .setFontColor('#616161')
+    .setWrap(true)
+    .setHorizontalAlignment('left')
+    .setVerticalAlignment('middle');
+
+  sheet.setRowHeight(r, 42);
+  r++;
+
+  const totalRows = r - startRow;
+
+  // Border keseluruhan panel
+  sheet.getRange(startRow, startCol, totalRows, totalCols)
+    .setBorder(true, true, true, true, true, true, '#dcedc8', SpreadsheetApp.BorderStyle.SOLID)
+    .setVerticalAlignment('middle');
+
+  // Lebar kolum
+  sheet.setColumnWidth(startCol, 170);     // I
+  sheet.setColumnWidth(startCol + 1, 135); // J
+  sheet.setColumnWidth(startCol + 2, 60);  // K
+  sheet.setColumnWidth(startCol + 3, 60);  // L
 }
 
 function writeHelperTables_(sheet, stats) {
   const startCol = DASHBOARD_CONFIG.helperStartColumn;
   const startRow = DASHBOARD_CONFIG.helperStartRow;
 
-  sheet.getRange(startRow, startCol, 140, 36).clearContent().clearFormat();
+  sheet.getRange(startRow, startCol, 120, 24).clearContent().clearFormat();
 
   const tables = [
-    { title: 'HOURLY', headers: ['HOUR', 'TOTAL'], rows: stats.hourlyTrend, colOffset: 0, width: 2 },
-    { title: 'MONTHLY', headers: ['MONTH', 'TOTAL'], rows: stats.monthly, colOffset: 3, width: 2 },
-    { title: 'CATEGORY', headers: ['CATEGORY', 'TOTAL'], rows: stats.category, colOffset: 6, width: 2 },
-    { title: 'GROUP CATEGORY', headers: ['GROUP', 'TOTAL'], rows: stats.groupCategory, colOffset: 9, width: 2 },
-    { title: 'TOWER DISTRIBUTION', headers: ['CATEGORY', 'Tower A', 'Tower B'], rows: stats.towerDistribution.slice(1), colOffset: 12, width: 3 },
-    { title: 'RECORD STATUS', headers: ['STATUS', 'TOTAL'], rows: stats.recordStatus, colOffset: 16, width: 2 },
-    { title: 'TOWER SUMMARY', headers: ['ITEM', 'TOTAL'], rows: stats.towerSummaryRows, colOffset: 19, width: 2 }
+    { title: 'HOURLY', headers: ['HOUR', 'TOTAL'], rows: stats.hourlyTrend, colOffset: 0 },
+    { title: 'MONTHLY', headers: ['MONTH', 'TOTAL'], rows: stats.monthly, colOffset: 3 },
+    { title: 'CATEGORY', headers: ['CATEGORY', 'TOTAL'], rows: stats.category, colOffset: 6 },
+    { title: 'GROUP CATEGORY', headers: ['GROUP', 'TOTAL'], rows: stats.groupCategory, colOffset: 9 },
+    { title: 'TOWER DISTRIBUTION', headers: ['GROUP CATEGORY', 'Tower A', 'Tower B'], rows: stats.towerDistribution.slice(1), colOffset: 12, width: 3 },
+    { title: 'RECORD STATUS', headers: ['STATUS', 'TOTAL'], rows: stats.recordStatus, colOffset: 16 }
   ];
 
   tables.forEach(table => {
     const col = startCol + table.colOffset;
-    const width = table.width;
+    const width = table.width || 2;
 
     sheet.getRange(startRow, col).setValue(table.title).setFontWeight('bold');
-
     sheet.getRange(startRow + 1, col, 1, width)
       .setValues([table.headers])
       .setFontWeight('bold')
       .setBackground('#e8f5e9');
 
     if (table.rows && table.rows.length) {
-      const dataRange = sheet.getRange(startRow + 2, col, table.rows.length, width);
-      dataRange.setValues(table.rows);
-
+      sheet.getRange(startRow + 2, col, table.rows.length, width).setValues(table.rows);
       sheet.getRange(startRow + 2, col, table.rows.length, 1).setNumberFormat('@');
       if (width > 1) {
         sheet.getRange(startRow + 2, col + 1, table.rows.length, width - 1).setNumberFormat('0');
@@ -914,8 +809,8 @@ function buildCharts_(sheet, stats) {
       .setOption('title', 'Tower Distribution by Category')
       .setOption('legend', { position: 'top' })
       .setOption('series', {
-        0: { color: '#4285F4' }, // Tower A
-        1: { color: '#0F9D58' }  // Tower B
+        0: { color: '#4285F4' },
+        1: { color: '#0F9D58' }
       })
       .setOption('vAxis', {
         textStyle: { fontSize: 10 },
@@ -946,107 +841,6 @@ function buildCharts_(sheet, stats) {
   charts.forEach(chart => sheet.insertChart(chart));
 }
 
-function buildTowerGroupBreakdown_(rows) {
-  const groups = [
-    'FOOD DELIVERY',
-    'PARCEL / COURIER',
-    'E-HAILING / DROP OFF / PICK UP',
-    'OWNER / TENANT',
-    'OTHERS'
-  ];
-
-  const result = {
-    'FOOD DELIVERY': { 'Tower A': 0, 'Tower B': 0 },
-    'PARCEL / COURIER': { 'Tower A': 0, 'Tower B': 0 },
-    'E-HAILING / DROP OFF / PICK UP': { 'Tower A': 0, 'Tower B': 0 },
-    'OWNER / TENANT': { 'Tower A': 0, 'Tower B': 0 },
-    'OTHERS': { 'Tower A': 0, 'Tower B': 0 }
-  };
-
-  rows.forEach(row => {
-    const group = CATEGORY_GROUPS[row.category] || 'OTHERS';
-
-    if (row.tower === 'Tower A' || row.tower === 'Tower A & B') {
-      result[group]['Tower A'] += 1;
-    }
-    if (row.tower === 'Tower B' || row.tower === 'Tower A & B') {
-      result[group]['Tower B'] += 1;
-    }
-  });
-
-  return [
-    ['CATEGORY', 'Tower A', 'Tower B'],
-    ['FOOD DELIVERY', result['FOOD DELIVERY']['Tower A'], result['FOOD DELIVERY']['Tower B']],
-    ['PARCEL / COURIER', result['PARCEL / COURIER']['Tower A'], result['PARCEL / COURIER']['Tower B']],
-    ['E-HAILING / DROP OFF / PICK UP', result['E-HAILING / DROP OFF / PICK UP']['Tower A'], result['E-HAILING / DROP OFF / PICK UP']['Tower B']],
-    ['OWNER / TENANT', result['OWNER / TENANT']['Tower A'], result['OWNER / TENANT']['Tower B']],
-    ['OTHERS', result['OTHERS']['Tower A'], result['OTHERS']['Tower B']]
-  ];
-}
-
-function buildTowerSummaryRows_(towerDistribution) {
-  const rows = towerDistribution.slice(1);
-
-  return rows.flatMap(r => [
-    [r[0], ''],
-    ['Tower A :', r[1]],
-    ['Tower B :', r[2]],
-    ['', '']
-  ]);
-}
-
-function writeTowerSummaryVisible_(sheet, towerDistribution) {
-  const startRow = 74;
-  const startCol = 1; // Column A
-
-  // Clear area lama
-  sheet.getRange(startRow, startCol, 20, 4).clearContent().clearFormat();
-
-  // Tajuk
-  sheet.getRange(startRow, startCol, 1, 4)
-    .merge()
-    .setValue('TOWER SUMMARY')
-    .setFontWeight('bold')
-    .setFontColor('#1b5e20')
-    .setBackground('#f1f8e9')
-    .setBorder(true, true, true, true, true, true, '#dcedc8', SpreadsheetApp.BorderStyle.SOLID);
-
-  let rowPointer = startRow + 2;
-
-  const rows = towerDistribution.slice(1); // buang header
-
-  rows.forEach(r => {
-    const category = r[0];
-    const towerA = r[1];
-    const towerB = r[2];
-
-    sheet.getRange(rowPointer, startCol, 1, 4)
-      .merge()
-      .setValue(category)
-      .setFontWeight('bold')
-      .setFontColor('#2e7d32');
-
-    sheet.getRange(rowPointer + 1, startCol, 1, 2)
-      .merge()
-      .setValue('Tower A : ' + towerA);
-
-    sheet.getRange(rowPointer + 1, startCol + 2, 1, 2)
-      .merge()
-      .setValue('Tower B : ' + towerB);
-
-    rowPointer += 3;
-  });
-
-  // Border keseluruhan block
-  sheet.getRange(startRow, startCol, rowPointer - startRow, 4)
-    .setBorder(true, true, true, true, true, true, '#dcedc8', SpreadsheetApp.BorderStyle.SOLID);
-
-  // Font
-  sheet.getRange(startRow, startCol, rowPointer - startRow, 4)
-    .setFontSize(10)
-    .setVerticalAlignment('middle');
-}
-
 function writeEmptyDashboardState_(sheet) {
   removeAllCharts_(sheet);
   sheet.getRange('A6:B6').setValue(0);
@@ -1054,7 +848,7 @@ function writeEmptyDashboardState_(sheet) {
   sheet.getRange('E6:F6').setValue('0%');
   sheet.getRange('G6:H6').setValue('0%');
   sheet.getRange('K2').setValue('NO DATA');
-  sheet.getRange('I6:L15').clearContent();
+  sheet.getRange('I5:L15').clearContent();
 }
 
 function getEarliestDateFromSource_(sheet) {
@@ -1072,12 +866,7 @@ function getLatestDateFromSource_(sheet) {
 function dateKey_(date) {
   const d = normalizeDateValue_(date);
   if (!d) return 0;
-
-  const year = d.getFullYear();
-  const month = d.getMonth() + 1;
-  const day = d.getDate();
-
-  return year * 10000 + month * 100 + day;
+  return d.getFullYear() * 10000 + (d.getMonth() + 1) * 100 + d.getDate();
 }
 
 function toDateOnly_(date) {
@@ -1098,11 +887,6 @@ function displayDate_(date) {
 function roundUpToStep_(value, step) {
   if (!value || value < 0) return step;
   return Math.ceil(value / step) * step;
-}
-
-function parseDashboardFilterDate_(sheet, a1Notation) {
-  const text = safeString_(sheet.getRange(a1Notation).getDisplayValue());
-  return normalizeDateValue_(text);
 }
 
 function getAutoStep_(maxValue) {
