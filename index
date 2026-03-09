@@ -1,8 +1,8 @@
 const DASHBOARD_CONFIG = {
-  sourceSheetName: 'SENSORY',
+  sourceSheetName: 'CERRADO',
   dashboardSheetName: 'DASHBOARD',
   timezone: 'Asia/Kuala_Lumpur',
-  headerTitle: 'SECURE ENTRY DASHBOARD | SENSORY',
+  headerTitle: 'SECURE ENTRY DASHBOARD | CERRADO',
   headerSubtitle: 'REGISTER.ACCESS.SECURE',
   filterStartCell: 'B3',
   filterEndCell: 'D3',
