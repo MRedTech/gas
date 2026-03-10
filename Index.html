@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <base target="_top">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <script src="https://www.gstatic.com/charts/loader.js"></script>
+    <style>
+      :root {
+        --green-900:#1b5e20;
+        --green-700:#2e7d32;
+        --green-100:#e8f5e9;
+        --green-050:#f7fbf7;
+        --line:#dcedc8;
+        --text:#243024;
+        --muted:#5f6f5f;
+      }
+      *{box-sizing:border-box}
+      body{margin:0;font-family:Arial,sans-serif;background:#fff;color:var(--text)}
+      .wrap{max-width:1320px;margin:0 auto;padding:16px}
+      .header{background:var(--green-100);padding:14px 16px;border-radius:10px}
+      .title{font-size:24px;font-weight:700;color:var(--green-900)}
+      .subtitle{font-size:12px;font-style:italic;color:#558b2f;margin-top:4px}
+      .toolbar{display:grid;grid-template-columns:1.2fr 1fr 1fr auto;gap:12px;margin-top:14px;align-items:end}
+      .field label{display:block;font-size:12px;font-weight:700;color:var(--green-900);margin-bottom:6px}
+      .field select,.field input{width:100%;padding:10px 12px;border:2px solid #a5d6a7;border-radius:8px;background:#f1f8e9;font-weight:700}
+      .btn{padding:11px 18px;border:none;border-radius:8px;background:var(--green-700);color:#fff;font-weight:700;cursor:pointer}
+      .btn:disabled{opacity:.65;cursor:wait}
+      .status{margin-top:10px;font-size:12px;color:var(--muted)}
+      .cards{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-top:16px}
+      .card{background:var(--green-050);border:1px solid #c8e6c9;border-radius:10px;padding:12px;text-align:center}
+      .card .k{font-size:11px;font-weight:700;color:var(--green-700)}
+      .card .v{font-size:28px;font-weight:700;color:var(--green-900);margin-top:6px}
+      .card .n{font-size:11px;color:#558b2f;margin-top:6px}
+      .grid-top{display:grid;grid-template-columns:1.2fr .8fr;gap:12px;margin-top:16px}
+      .panel{border:1px solid var(--line);border-radius:10px;overflow:hidden;background:#fff}
+      .panel h3{margin:0;padding:10px 12px;background:#f1f8e9;color:var(--green-900);font-size:14px}
+      .panel-body{padding:12px}
+      .tower-table,.simple-table{width:100%;border-collapse:collapse;font-size:13px}
+      .tower-table th,.tower-table td,.simple-table th,.simple-table td{padding:8px;border-bottom:1px solid #eef5ea}
+      .tower-table th,.simple-table th{text-align:left;color:var(--green-900);font-size:12px}
+      .tower-table td.num,.simple-table td.num{text-align:center;font-weight:700}
+      .tower-note{margin-top:10px;font-size:11px;font-style:italic;color:#616161;line-height:1.45}
+      .charts{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:16px}
+      .chart-card{border:1px solid var(--line);border-radius:10px;overflow:hidden;background:#fff}
+      .chart-title{padding:10px 12px;background:#f1f8e9;font-size:14px;font-weight:700;color:var(--green-900)}
+      .chart-box{height:330px;padding:4px 6px}
+      .footer-meta{margin-top:12px;font-size:12px;color:var(--muted)}
+      @media (max-width:980px){
+        .toolbar,.cards,.grid-top,.charts{grid-template-columns:1fr}
+        .chart-box{height:280px}
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <div class="header">
+        <div class="title" id="title">SECURE ENTRY DASHBOARD</div>
+        <div class="subtitle" id="subtitle">REGISTER.ACCESS.SECURE</div>
+        <div class="toolbar">
+          <div class="field">
+            <label for="site">SITE</label>
+            <select id="site"></select>
+          </div>
+          <div class="field">
+            <label for="startDate">FILTER START DATE</label>
+            <input id="startDate" type="date">
+          </div>
+          <div class="field">
+            <label for="endDate">FILTER END DATE</label>
+            <input id="endDate" type="date">
+          </div>
+          <button id="searchBtn" class="btn">SEARCH</button>
+        </div>
+        <div class="status" id="status">Loading...</div>
+      </div>
+
+      <div class="cards">
+        <div class="card"><div class="k">TOTAL REGISTRATION</div><div class="v" id="totalRegistration">0</div><div class="n" id="dateRange">-</div></div>
+        <div class="card"><div class="k">PEAK HOUR</div><div class="v" id="peakHour">-</div><div class="n">Waktu puncak tertinggi dalam filter</div></div>
+        <div class="card"><div class="k">RECORD FOUND RATE</div><div class="v" id="recordFoundRate">0%</div><div class="n">Rekod sedia ada / total dalam filter</div></div>
+        <div class="card"><div class="k">NEW RECORD RATE</div><div class="v" id="newRecordRate">0%</div><div class="n">Rekod baru / total dalam filter</div></div>
+      </div>
+
+      <div class="grid-top">
+        <div class="panel">
+          <h3>REGISTRATION BY GROUP CATEGORY &amp; TOWER</h3>
+          <div class="panel-body">
+            <table class="tower-table" id="towerTable"></table>
+            <div class="tower-note" id="towerNote"></div>
+          </div>
+        </div>
+        <div class="panel">
+          <h3>GROUP CATEGORY BREAKDOWN</h3>
+          <div class="panel-body">
+            <div id="groupPie" class="chart-box" style="height:280px;padding:0"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="charts">
+        <div class="chart-card">
+          <div class="chart-title">HOURLY REGISTRATION TREND</div>
+          <div id="hourlyChart" class="chart-box"></div>
+        </div>
+        <div class="chart-card">
+          <div class="chart-title">MONTHLY REGISTRATION TREND</div>
+          <div id="monthlyChart" class="chart-box"></div>
+        </div>
+        <div class="chart-card">
+          <div class="chart-title">CATEGORY BREAKDOWN</div>
+          <div id="categoryChart" class="chart-box"></div>
+        </div>
+        <div class="chart-card">
+          <div class="chart-title">RECORD STATUS</div>
+          <div id="recordPie" class="chart-box"></div>
+        </div>
+        <div class="chart-card" style="grid-column:1 / -1;">
+          <div class="chart-title">TOWER DISTRIBUTION BY CATEGORY</div>
+          <div id="towerChart" class="chart-box"></div>
+        </div>
+      </div>
+
+      <div class="footer-meta" id="lastUpdated"></div>
+    </div>
+
+    <script>
+      google.charts.load('current', {'packages':['corechart']});
+      let currentData = null;
+
+      function dmyToInput(text) {
+        const m = String(text || '').match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+        return m ? `${m[3]}-${m[2]}-${m[1]}` : '';
+      }
+      function inputToDmy(text) {
+        const m = String(text || '').match(/^(\d{4})-(\d{2})-(\d{2})$/);
+        return m ? `${m[3]}/${m[2]}/${m[1]}` : '';
+      }
+      function setBusy(busy, msg) {
+        document.getElementById('searchBtn').disabled = busy;
+        document.getElementById('status').textContent = msg || '';
+      }
+
+      function renderCards(payload) {
+        const stats = payload.stats;
+        document.getElementById('title').textContent = payload.title;
+        document.getElementById('subtitle').textContent = payload.subtitle;
+        document.getElementById('totalRegistration').textContent = stats.totalRegistration;
+        document.getElementById('peakHour').textContent = stats.peakHour;
+        document.getElementById('recordFoundRate').textContent = stats.recordFoundRate;
+        document.getElementById('newRecordRate').textContent = stats.newRecordRate;
+        document.getElementById('dateRange').textContent = `${payload.startLabel} - ${payload.endLabel}`;
+        document.getElementById('lastUpdated').textContent = `LAST UPDATED: ${payload.lastUpdated}`;
+      }
+
+      function renderTowerTable(payload) {
+        const data = payload.stats.registrationByGroupCategoryTower;
+        const table = document.getElementById('towerTable');
+        let html = '<tr><th style="width:55%">GROUP CATEGORY</th><th class="num">A</th><th class="num">B</th></tr>';
+        data.rows.forEach(row => {
+          html += `<tr><td>${row.group}</td><td class="num">${row.towerA}</td><td class="num">${row.towerB}</td></tr>`;
+        });
+        html += `<tr><td><strong>TOTAL TOWER</strong></td><td class="num"><strong>${data.totalTowerA}</strong></td><td class="num"><strong>${data.totalTowerB}</strong></td></tr>`;
+        html += `<tr><td colspan="2"><strong>GRAND TOTAL</strong></td><td class="num"><strong>${data.grandTotal}</strong></td></tr>`;
+        table.innerHTML = html;
+        document.getElementById('towerNote').textContent = data.note || '';
+      }
+
+      function drawColumnChart(el, rows, labelKey, valueKey, vAxisMax, vAxisStep, title) {
+        const data = new google.visualization.DataTable();
+        data.addColumn('string', title);
+        data.addColumn('number', 'Total');
+        rows.forEach(row => data.addRow([row[labelKey], row[valueKey]]));
+
+        const options = {
+          legend: { position: 'none' },
+          backgroundColor: '#ffffff',
+          chartArea: { left: 56, top: 20, width: '78%', height: '68%' },
+          vAxis: {
+            minValue: 0,
+            viewWindow: { min: 0, max: vAxisMax },
+            gridlines: { count: Math.floor(vAxisMax / vAxisStep) + 1 }
+          },
+          hAxis: { slantedText: true, slantedTextAngle: 35 },
+          colors: ['#66bb6a']
+        };
+        new google.visualization.ColumnChart(document.getElementById(el)).draw(data, options);
+      }
+
+      function drawBarChart(el, rows) {
+        const data = new google.visualization.DataTable();
+        data.addColumn('string', 'Category');
+        data.addColumn('number', 'Total');
+        rows.forEach(row => data.addRow([row.label, row.total]));
+        const max = Math.max(0, ...rows.map(r => r.total));
+        const step = getAutoStep(max);
+        const options = {
+          legend: { position: 'none' },
+          backgroundColor: '#ffffff',
+          chartArea: { left: 160, top: 20, width: '60%', height: '72%' },
+          hAxis: {
+            viewWindow: { min: 0, max: roundUpToStep(max, step) },
+            gridlines: { count: Math.floor(roundUpToStep(max, step) / step) + 1 }
+          },
+          colors: ['#81c784']
+        };
+        new google.visualization.BarChart(document.getElementById(el)).draw(data, options);
+      }
+
+      function drawPieChart(el, rows) {
+        const data = new google.visualization.DataTable();
+        data.addColumn('string', 'Label');
+        data.addColumn('number', 'Total');
+        rows.forEach(row => data.addRow([row.label || row.status, row.total]));
+        const options = {
+          pieHole: 0.45,
+          legend: { position: 'labeled' },
+          sliceVisibilityThreshold: 0,
+          backgroundColor: '#ffffff',
+          chartArea: { left: 10, top: 10, width: '90%', height: '85%' }
+        };
+        new google.visualization.PieChart(document.getElementById(el)).draw(data, options);
+      }
+
+      function drawTowerChart(el, rows) {
+        const data = new google.visualization.DataTable();
+        data.addColumn('string', 'Group Category');
+        data.addColumn('number', 'Tower A');
+        data.addColumn('number', 'Tower B');
+        rows.forEach(row => data.addRow([row.group, row.towerA, row.towerB]));
+        const max = Math.max(0, ...rows.flatMap(r => [r.towerA, r.towerB]));
+        const step = getAutoStep(max);
+        const options = {
+          legend: { position: 'top' },
+          backgroundColor: '#ffffff',
+          chartArea: { left: 60, top: 35, width: '82%', height: '65%' },
+          colors: ['#4285F4', '#0F9D58'],
+          vAxis: {
+            viewWindow: { min: 0, max: roundUpToStep(max, step) },
+            gridlines: { count: Math.floor(roundUpToStep(max, step) / step) + 1 }
+          },
+          hAxis: { slantedText: true, slantedTextAngle: 25 }
+        };
+        new google.visualization.ColumnChart(document.getElementById(el)).draw(data, options);
+      }
+
+      function getAutoStep(maxValue) {
+        if (maxValue <= 50) return 5;
+        if (maxValue <= 100) return 10;
+        if (maxValue <= 250) return 25;
+        if (maxValue <= 500) return 50;
+        if (maxValue <= 1000) return 100;
+        return 200;
+      }
+      function roundUpToStep(value, step) {
+        if (!value || value < 0) return step;
+        return Math.ceil(value / step) * step;
+      }
+
+      function renderCharts(payload) {
+        const stats = payload.stats;
+        drawColumnChart('hourlyChart', stats.hourlyTrend, 'hour', 'total', roundUpToStep(Math.max(0, ...stats.hourlyTrend.map(r => r.total)), 5), 5, 'Hour');
+        drawColumnChart('monthlyChart', stats.monthlyTrend, 'month', 'total', roundUpToStep(Math.max(0, ...stats.monthlyTrend.map(r => r.total)), 500), 500, 'Month');
+        drawBarChart('categoryChart', stats.categoryBreakdown);
+        drawPieChart('groupPie', stats.groupCategoryBreakdown);
+        drawPieChart('recordPie', stats.recordStatus);
+        drawTowerChart('towerChart', stats.towerDistribution);
+      }
+
+      function renderAll(payload) {
+        currentData = payload;
+        renderCards(payload);
+        renderTowerTable(payload);
+        google.charts.setOnLoadCallback(() => renderCharts(payload));
+        setBusy(false, `Data siap untuk ${payload.site}.`);
+      }
+
+      function populateSites(sites, defaultSite) {
+        const select = document.getElementById('site');
+        select.innerHTML = sites.map(site => `<option value="${site}" ${site === defaultSite ? 'selected' : ''}>${site}</option>`).join('');
+      }
+
+      function loadInitial() {
+        setBusy(true, 'Loading dashboard...');
+        google.script.run
+          .withSuccessHandler(response => {
+            populateSites(response.sites, response.defaultSite);
+            document.getElementById('startDate').value = dmyToInput(response.defaultStartDate);
+            document.getElementById('endDate').value = dmyToInput(response.defaultEndDate);
+            renderAll(response.data);
+          })
+          .withFailureHandler(err => {
+            setBusy(false, err.message || 'Gagal load dashboard.');
+          })
+          .getInitialData();
+      }
+
+      function search() {
+        const payload = {
+          site: document.getElementById('site').value,
+          startDate: inputToDmy(document.getElementById('startDate').value),
+          endDate: inputToDmy(document.getElementById('endDate').value)
+        };
+        setBusy(true, 'Sedang cari statistik...');
+        google.script.run
+          .withSuccessHandler(renderAll)
+          .withFailureHandler(err => setBusy(false, err.message || 'Carian gagal.'))
+          .getDashboardData(payload);
+      }
+
+      document.getElementById('searchBtn').addEventListener('click', search);
+      window.addEventListener('load', loadInitial);
+      window.addEventListener('resize', () => { if (currentData) renderCharts(currentData); });
+    </script>
+  </body>
+</html>
