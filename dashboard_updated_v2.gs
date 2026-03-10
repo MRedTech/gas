@@ -316,8 +316,10 @@ function normalizeTower_(value) {
 }
 
 function normalizeCategory_(value) {
-  const text = safeUpper_(value);
+  let text = safeUpper_(value);
   if (!text) return '';
+
+  text = text.replace(/\s*\/\s*/g, ' / ');
 
   const knownCategories = [
     'GRAB FOOD',
